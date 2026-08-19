@@ -1,0 +1,1 @@
+logs zip failed rc=1

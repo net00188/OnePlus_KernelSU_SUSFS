@@ -6,6 +6,7 @@ name: Custom build (OP-ACE-3-PRO 6.1.75, wakelock revert)
 #   1) revert add_timeout_wakelocks_globally.patch  -> persistent sysfs wakelocks
 #      (fixes screen-off loss of kernel-WireGuard + adbd reachability)
 #   2) toolchain cache miss falls back to direct download (fork has no cache release)
+#   3) toolchain cache BASE points at upstream WildKernels release (public assets)
 # Config: WildKernels OP-ACE-3-PRO-6.1.75 (matches currently flashed
 #         AK3_OP-ACE-3-PRO_A15_android14-6.1.75_KSUN_33223_SuSFS_v2.2.0.zip)
 # KSUN pinned to the exact commit of the running kernel (v33223).
@@ -66,10 +67,18 @@ jobs:
           s2 = '\n'.join(out)
           assert 'FATAL ERROR' not in s2, 'fatal prints still present'
           open(p2, 'w').write(s2)
+
+          # 3) use UPSTREAM toolchain cache release (fork has none of its own)
+          p3 = '.github/actions/kernel-source-sync/action.yml'
+          s3 = open(p3).read()
+          oldrepo = 'TARGET_REPO = "${{ github.repository }}"'
+          newrepo = 'TARGET_REPO = "WildKernels/OnePlus_KernelSU_SUSFS"'
+          assert oldrepo in s3, 'TARGET_REPO line not found'
+          open(p3, 'w').write(s3.replace(oldrepo, newrepo))
           print('custom injections applied')
           PYEOF
           grep -n "__pm_stay_awake" .github/actions/build-kernel/action.yml
-          grep -n "direct download" .github/actions/kernel-source-sync/action.yml
+          grep -n "WildKernels/OnePlus_KernelSU_SUSFS" .github/actions/kernel-source-sync/action.yml
 
       - name: Install Minimal Dependencies
         run: |
@@ -148,6 +157,6 @@ jobs:
 
           Changes vs upstream:
           - add_timeout_wakelocks_globally.patch reverted -> /sys/power/wake_lock wakelocks persist again (screen-off VPN/adbd reachability fix)
-          - toolchain sync falls back to direct downloads (fork has no toolchain-cache release)
+          - toolchains fetched from upstream WildKernels release cache (fork has no mirror)
 
           KernelSU-Next pinned to d6a42fd9 (v33223), SUSFS v2.2.0 (gki-android14-6.1 head)."

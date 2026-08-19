@@ -10,7 +10,6 @@ name: Custom build (OP-ACE-3-PRO 6.1.75, wakelock revert)
 #   4) internal sub-action refs point at patched workspace copies (not action-source)
 # Config: WildKernels OP-ACE-3-PRO-6.1.75 (matches currently flashed
 #         AK3_OP-ACE-3-PRO_A15_android14-6.1.75_KSUN_33223_SuSFS_v2.2.0.zip)
-# KSUN pinned to the exact commit of the running kernel (v33223).
 
 on:
   workflow_dispatch:
@@ -25,7 +24,7 @@ permissions:
 
 jobs:
   build:
-    name: OP-ACE-3-PRO-6.1.75 KSUN-33223 no-wakelock-timeout
+    name: OP-ACE-3-PRO-6.1.75 KSUN no-wakelock-timeout
     runs-on: ubuntu-latest
     timeout-minutes: 330
     steps:
@@ -152,8 +151,9 @@ jobs:
         with:
           op_config_json: ${{ steps.prepare_config.outputs.config_json }}
           ksu_type: KSUN
-          # pinned: rev-list count 3223 on dev = v33223, same as running kernel (2026-07-20)
-          ksu_branch_or_hash: d6a42fd9285c11b8e8e67bfe72a5050528006c00
+          # dev head: susfs fix patches in kernel_patches/main track KSUN dev HEAD;
+          # pinning to the running kernel's commit (d6a42fd9/v33223) made them reject.
+          ksu_branch_or_hash: dev
           # empty = branch head gki-android14-6.1 (currently v2.2.0, same as running kernel)
           susfs_commit_hash_or_branch: ''
           optimize_level: O2
@@ -170,14 +170,13 @@ jobs:
           ls -la "$ARTIFACTS_FOLDER"
           TAG="custom-ace3pro-noWL-$(date -u +%Y%m%d-%H%M)"
           gh release create "$TAG" "$ARTIFACTS_FOLDER/$ZIP_NAME" \
-            --title "OP-ACE-3-PRO 6.1.75 KSUN 33223 (no wakelock timeout)" \
+            --title "OP-ACE-3-PRO 6.1.75 KSUN (no wakelock timeout)" \
             --notes "WildKernels OnePlus_KernelSU_SUSFS build for SM8650 / Android 15 (OnePlus), config OP-ACE-3-PRO-6.1.75.
 
           Changes vs upstream:
           - add_timeout_wakelocks_globally.patch reverted -> /sys/power/wake_lock wakelocks persist again (screen-off VPN/adbd reachability fix)
           - toolchains fetched from upstream WildKernels release cache (fork has no mirror)
-
-          KernelSU-Next pinned to d6a42fd9 (v33223), SUSFS v2.2.0 (gki-android14-6.1 head)."
+          - KernelSU-Next from dev branch head, SUSFS v2.2.0 (gki-android14-6.1 head)."
 
   publish-diag:
     name: Publish logs (always)

@@ -1,4 +1,4 @@
-# Custom build (OP-ACE-3-PRO 6.1.75, wakelock revert)
+name: Custom build (OP-ACE-3-PRO 6.1.75, wakelock revert)
 
 # Custom single-device kernel build for SM8650 / Android 15 (OnePlus PJX110).
 # Fork stays pristine: all customizations are injected into the checked-out
@@ -75,12 +75,15 @@ jobs:
         run: |
           set -euo pipefail
           echo "::group::Install dependencies"
-          sudo apt-get -o Acquire::Retries=3 update -qq
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+          sudo timeout 600 apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update -qq
+          sudo DEBIAN_FRONTEND=noninteractive timeout 900 apt-get install -y --no-install-recommends \
             git curl ca-certificates build-essential clang lld flex bison \
             libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
-            libxml2-utils rsync unzip dwarves file python3 ccache jq bc dos2unix kmod libdw-dev elfutils pigz zip aria2
+            libxml2-utils rsync unzip dwarves file python3 ccache jq bc dos2unix kmod libdw-dev elfutils pigz
           sudo apt-get clean
+          command -v aria2c >/dev/null 2>&1 || sudo DEBIAN_FRONTEND=noninteractive timeout 300 apt-get install -y --no-install-recommends aria2
+          command -v zip >/dev/null 2>&1 || sudo DEBIAN_FRONTEND=noninteractive timeout 300 apt-get install -y --no-install-recommends zip
+          echo "aria2c: $(command -v aria2c)  zip: $(command -v zip)"
           echo "✅ Dependencies installed"
           echo "::endgroup::"
 

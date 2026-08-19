@@ -151,9 +151,10 @@ jobs:
         with:
           op_config_json: ${{ steps.prepare_config.outputs.config_json }}
           ksu_type: KSUN
-          # dev head: susfs fix patches in kernel_patches/main track KSUN dev HEAD;
-          # pinning to the running kernel's commit (d6a42fd9/v33223) made them reject.
-          ksu_branch_or_hash: dev
+          # pinned to KSUN v33239 (2026-08-11, rev-list count 3239 on dev) - the exact
+          # combo of upstream release v2.2.0-r4 (2026-08-12) that built green with
+          # SUSFS v2.2.0 + current kernel_patches fix patches.
+          ksu_branch_or_hash: 234f6e040fcbca18b16d2398e1aa225712ec99ad
           # empty = branch head gki-android14-6.1 (currently v2.2.0, same as running kernel)
           susfs_commit_hash_or_branch: ''
           optimize_level: O2
@@ -170,13 +171,13 @@ jobs:
           ls -la "$ARTIFACTS_FOLDER"
           TAG="custom-ace3pro-noWL-$(date -u +%Y%m%d-%H%M)"
           gh release create "$TAG" "$ARTIFACTS_FOLDER/$ZIP_NAME" \
-            --title "OP-ACE-3-PRO 6.1.75 KSUN (no wakelock timeout)" \
+            --title "OP-ACE-3-PRO 6.1.75 KSUN 33239 (no wakelock timeout)" \
             --notes "WildKernels OnePlus_KernelSU_SUSFS build for SM8650 / Android 15 (OnePlus), config OP-ACE-3-PRO-6.1.75.
 
           Changes vs upstream:
           - add_timeout_wakelocks_globally.patch reverted -> /sys/power/wake_lock wakelocks persist again (screen-off VPN/adbd reachability fix)
           - toolchains fetched from upstream WildKernels release cache (fork has no mirror)
-          - KernelSU-Next from dev branch head, SUSFS v2.2.0 (gki-android14-6.1 head)."
+          - KernelSU-Next v33239 (r4 combo), SUSFS v2.2.0 (gki-android14-6.1 head)."
 
   publish-diag:
     name: Publish logs (always)

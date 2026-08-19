@@ -1,0 +1,150 @@
+# Custom build (OP-ACE-3-PRO 6.1.75, wakelock revert)
+
+# Custom single-device kernel build for SM8650 / Android 15 (OnePlus PJX110).
+# Fork stays pristine: all customizations are injected into the checked-out
+# composite actions at job start, before `uses: ./...` picks them up.
+#   1) revert add_timeout_wakelocks_globally.patch  -> persistent sysfs wakelocks
+#      (fixes screen-off loss of kernel-WireGuard + adbd reachability)
+#   2) toolchain cache miss falls back to direct download (fork has no cache release)
+# Config: WildKernels OP-ACE-3-PRO-6.1.75 (matches currently flashed
+#         AK3_OP-ACE-3-PRO_A15_android14-6.1.75_KSUN_33223_SuSFS_v2.2.0.zip)
+# KSUN pinned to the exact commit of the running kernel (v33223).
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/build-custom.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: OP-ACE-3-PRO-6.1.75 KSUN-33223 no-wakelock-timeout
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: 💉 Inject custom patches into composite actions
+        run: |
+          set -euo pipefail
+          python3 - <<'PYEOF'
+          p = '.github/actions/build-kernel/action.yml'
+          s = open(p).read()
+          anchor = 'patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/common/add_timeout_wakelocks_globally.patch"'
+          inject = anchor + '\n' + '\n'.join([
+              '        # CUSTOM REVERT: restore persistent sysfs wakelocks (screen-off VPN access)',
+              "        sed -i 's/__pm_wakeup_event(wl->ws, 500)/__pm_stay_awake(wl->ws)/' kernel/power/wakelock.c",
+              "        grep -q '__pm_stay_awake(wl->ws)' kernel/power/wakelock.c || { echo '::error::wakelock revert failed'; exit 1; }",
+              '        echo "CUSTOM: persistent wakelocks restored"'])
+          assert s.count(anchor) == 1, 'anchor not found in build-kernel action'
+          open(p, 'w').write(s.replace(anchor, inject))
+
+          p2 = '.github/actions/kernel-source-sync/action.yml'
+          s2 = open(p2).read()
+          fatal = 'print(f"::error::[FATAL ERROR] Toolchain {base_filename} NOT FOUND in GitHub Release cache!")'
+          assert s2.count(fatal) == 1, 'fatal block not found'
+          lines = s2.split('\n')
+          out = []
+          skip = 0
+          for l in lines:
+              if skip > 0:
+                  skip -= 1
+                  continue
+              if fatal in l:
+                  out.append(l.replace('::error::[FATAL ERROR]', '::warning::')
+                             .replace(' NOT FOUND in GitHub Release cache!', ' not in release cache - direct download'))
+                  skip = 2  # drop the second error print + return False
+                  continue
+              out.append(l)
+          s2 = '\n'.join(out)
+          assert 'FATAL ERROR' not in s2, 'fatal prints still present'
+          open(p2, 'w').write(s2)
+          print('custom injections applied')
+          PYEOF
+          grep -n "__pm_stay_awake" .github/actions/build-kernel/action.yml
+          grep -n "direct download" .github/actions/kernel-source-sync/action.yml
+
+      - name: Install Minimal Dependencies
+        run: |
+          set -euo pipefail
+          echo "::group::Install dependencies"
+          sudo apt-get -o Acquire::Retries=3 update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            git curl ca-certificates build-essential clang lld flex bison \
+            libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
+            libxml2-utils rsync unzip dwarves file python3 ccache jq bc dos2unix kmod libdw-dev elfutils pigz zip aria2
+          sudo apt-get clean
+          echo "✅ Dependencies installed"
+          echo "::endgroup::"
+
+      - name: ♻️ Configure ccache (single build, no persistence)
+        run: |
+          set -euo pipefail
+          mkdir -p "${{ github.workspace }}/.ccache"
+          for setting in \
+            "CCACHE_DIR=${{ github.workspace }}/.ccache" \
+            "CCACHE_MAXSIZE=12G" \
+            "CCACHE_COMPILERCHECK=content" \
+            "CCACHE_BASEDIR=${GITHUB_WORKSPACE}" \
+            "CCACHE_NOHASHDIR=true" \
+            "CCACHE_IGNOREOPTIONS=--sysroot*" \
+            "CCACHE_COMPRESSION=true" \
+            "CCACHE_COMPRESSION_LEVEL=3" \
+            "CCACHE_DIRECT=true" \
+            "CCACHE_FILE_CLONE=true" \
+            "CCACHE_INODE_CACHE=true" \
+            "CCACHE_IS_KERNEL_COMPILING=true" \
+            "CCACHE_UMASK=002" \
+            "CCACHE_SLOPPINESS=file_macro,time_macros,include_file_mtime,include_file_ctime,pch_defines,system_headers,locale"; do
+            export "$setting"
+            echo "$setting" >> "$GITHUB_ENV"
+          done
+          ccache -p | head -n 5 || true
+
+      - name: 🧹 Prepare op_config_json
+        id: prepare_config
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq . configs/a15/OP-ACE-3-PRO-6.1.75.json
+          echo "config_json=$(jq -c . configs/a15/OP-ACE-3-PRO-6.1.75.json)" >> "$GITHUB_OUTPUT"
+
+      - name: 🔨 Build Kernel
+        id: build
+        uses: ./.github/actions/build-kernel
+        with:
+          op_config_json: ${{ steps.prepare_config.outputs.config_json }}
+          ksu_type: KSUN
+          # pinned: rev-list count 3223 on dev = v33223, same as running kernel (2026-07-20)
+          ksu_branch_or_hash: d6a42fd9285c11b8e8e67bfe72a5050528006c00
+          # empty = branch head gki-android14-6.1 (currently v2.2.0, same as running kernel)
+          susfs_commit_hash_or_branch: ''
+          optimize_level: O2
+          clean: true
+          debug: false
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🚀 Create release with flashable zip
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          ls -la "$ARTIFACTS_FOLDER"
+          TAG="custom-ace3pro-noWL-$(date -u +%Y%m%d-%H%M)"
+          gh release create "$TAG" "$ARTIFACTS_FOLDER/$ZIP_NAME" \
+            --title "OP-ACE-3-PRO 6.1.75 KSUN 33223 (no wakelock timeout)" \
+            --notes "WildKernels OnePlus_KernelSU_SUSFS build for SM8650 / Android 15 (OnePlus), config OP-ACE-3-PRO-6.1.75.
+
+          Changes vs upstream:
+          - add_timeout_wakelocks_globally.patch reverted -> /sys/power/wake_lock wakelocks persist again (screen-off VPN/adbd reachability fix)
+          - toolchain sync falls back to direct downloads (fork has no toolchain-cache release)
+
+          KernelSU-Next pinned to d6a42fd9 (v33223), SUSFS v2.2.0 (gki-android14-6.1 head)."

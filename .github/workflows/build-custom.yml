@@ -197,8 +197,9 @@ jobs:
           set -uo pipefail
           mkdir -p diag
           sleep 30
-          gh run view "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --log-failed > "diag/failed_$GITHUB_RUN_ID.log" 2>&1 || echo "log-failed failed rc=$?" >> "diag/failed_$GITHUB_RUN_ID.log"
-          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/logs" > "diag/logs_$GITHUB_RUN_ID.zip" 2>/dev/null || echo "logs zip failed rc=$?" > "diag/logs_error.txt"
+          JID=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" --jq '.jobs[] | select(.name | startswith("OP-ACE")) | .id' | head -1)
+          echo "build job id: $JID" > "diag/failed_$GITHUB_RUN_ID.log"
+          gh api "repos/$GITHUB_REPOSITORY/actions/jobs/$JID/logs" >> "diag/failed_$GITHUB_RUN_ID.log" 2>&1 || echo "job logs failed rc=$?" >> "diag/failed_$GITHUB_RUN_ID.log"
           wc -c diag/* || true
       - name: Commit logs to repo
         run: |

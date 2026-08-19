@@ -8,6 +8,7 @@ name: Custom build (OP-ACE-3-PRO 6.1.75, wakelock revert)
 #   2) toolchain cache miss falls back to direct download (fork has no cache release)
 #   3) toolchain cache BASE points at upstream WildKernels release (public assets)
 #   4) internal sub-action refs point at patched workspace copies (not action-source)
+#   5) KSUN/SUSFS pinned to upstream release v2.2.0-r4 combo (last known green)
 # Config: WildKernels OP-ACE-3-PRO-6.1.75 (matches currently flashed
 #         AK3_OP-ACE-3-PRO_A15_android14-6.1.75_KSUN_33223_SuSFS_v2.2.0.zip)
 
@@ -152,11 +153,10 @@ jobs:
           op_config_json: ${{ steps.prepare_config.outputs.config_json }}
           ksu_type: KSUN
           # pinned to KSUN v33239 (2026-08-11, rev-list count 3239 on dev) - the exact
-          # combo of upstream release v2.2.0-r4 (2026-08-12) that built green with
-          # SUSFS v2.2.0 + current kernel_patches fix patches.
+          # combo of upstream release v2.2.0-r4 (2026-08-12) that built green.
           ksu_branch_or_hash: 234f6e040fcbca18b16d2398e1aa225712ec99ad
-          # empty = branch head gki-android14-6.1 (currently v2.2.0, same as running kernel)
-          susfs_commit_hash_or_branch: ''
+          # pinned to susfs gki-android14-6.1 @ 2026-07-31 (r4-era head; branch head has drifted)
+          susfs_commit_hash_or_branch: e287d59066380bf6de4396532d4a42edf4408701
           optimize_level: O2
           clean: true
           debug: true
@@ -177,7 +177,7 @@ jobs:
           Changes vs upstream:
           - add_timeout_wakelocks_globally.patch reverted -> /sys/power/wake_lock wakelocks persist again (screen-off VPN/adbd reachability fix)
           - toolchains fetched from upstream WildKernels release cache (fork has no mirror)
-          - KernelSU-Next v33239 (r4 combo), SUSFS v2.2.0 (gki-android14-6.1 head)."
+          - KernelSU-Next v33239 + SUSFS v2.2.0 @ e287d59 (upstream v2.2.0-r4 combo)."
 
   publish-diag:
     name: Publish logs (always)

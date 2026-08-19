@@ -153,7 +153,7 @@ same KSU manager (v33239 manager vs v33223 kernel-side is fine).
 | KernelSU / root / wg0 | — | OK (uid=0, wg0 self-healed at boot) |
 | uname | `…#1 Tue Jul 21 2026` | `…#1 Wed Aug 19 12:55:02 UTC 2026` |
 
-## Device-side keepalive (optional)
+## Device-side keepalive (optional, time-windowed)
 
 With persistent wakelocks restored, holding one is a plain sysfs write.
 `device/wg-keepalive-sysfs.sh` (in this repo) does that on boot via
@@ -166,18 +166,27 @@ cp device/wg-keepalive-sysfs.sh /data/adb/service.d/ && chmod 755 $_
 touch /data/adb/wireguard/DISABLE_WAKELOCK && reboot
 ```
 
-Re-arms every 5 min + sets `iw dev wlan0 set power_save off`. On stock WILD
-this script is useless (the lock dies in 500 ms) — it only works on this build.
+**Time window** (default): **07:00–01:00 the wakelock is held** (phone reachable,
+`wlan0 power_save off`); **01:00–07:00 it is released** — the phone deep-sleeps
+normally (saves ~9 %/night vs holding) and is *not* reachable, by design. At
+01:00 an **RTC wakealarm for 07:00** is armed (`/sys/class/rtc/rtc0/wakealarm`),
+because a suspended shell's `sleep` never advances — without the alarm the
+morning re-arm would never fire. Both transitions are logged to
+`/data/adb/wireguard/wg-remote-keepalive.log`. Edit `NIGHT_START`/`NIGHT_END`
+at the top of the script for a different window.
+
+Force a mode for testing: `echo night|day > /data/adb/wireguard/WL_TEST_MODE`
+(`rm` it to return to the real clock). On stock WILD this script is useless
+(the lock dies in 500 ms) — it only works on this build.
 
 ## Battery honesty
 
 Holding a wakelock keeps the SoC awake: measured ~80–155 mA idle-locked
 (≈ +1.5–2 %/h on a 6100 mAh pack) **while you want screen-off reachability**.
-Screen-on use and charging are unaffected. If you don't need round-the-clock
-reachability, don't install the keepalive script — you still get correct
-wakelock semantics for anything else that needs them. A future "suspend + RTC
-wake every 30 s to feed WG keepalive" mode could drop the cost to ~+0.3–0.5 %/h
-at the price of intermittent-only adb.
+Screen-on use and charging are unaffected. With the default time window the
+night cost drops to normal deep-sleep drain (~0.5 %/h). If you don't need
+reachability at all, remove the keepalive script — you still get correct
+wakelock semantics for anything else that needs them.
 
 ---
 
@@ -188,4 +197,4 @@ at the price of intermittent-only adb.
 - **本 fork 改动**：workflow 在构建时注入 5 处修改（补丁回退 / 工具链缓存 miss 降级 / 工具链缓存指向上游 release / 子 action 引用改回工作区副本 / 禁用 ccache save），版本组合锁定上游 v2.2.0-r4（KSUN v33239 + SUSFS e287d59）。
 - **刷入**：Release 下载 AK3 zip 用刷机工具刷，或 magiskboot unpack→替换 kernel→repack→dd 到活动槽位；回滚 dd 备份即可。
 - **验证**：wakelock 13 秒仍持有；锁屏 6.5 分钟 ping 281/281 零丢包；suspend 计数 0 增长；锁屏态 adb 秒响应。
-- **代价**：持锁期间锁屏耗电约 +1.5~2%/h（可接受则装 `device/wg-keepalive-sysfs.sh`，不需要 24h 可达可不装）。
+- **代价**：持锁期间锁屏耗电约 +1.5~2%/h。默认已做分时：07:00–01:00 持锁可达，01:00–07:00 释放锁深睡省电（RTC 闹铃 07:00 自动唤醒重新持锁）。

@@ -170,7 +170,7 @@ jobs:
           susfs_commit_hash_or_branch: e287d59066380bf6de4396532d4a42edf4408701
           optimize_level: O2
           clean: true
-          debug: true
+          debug: false
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 🚀 Create release with flashable zip

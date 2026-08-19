@@ -9,6 +9,7 @@ name: Custom build (OP-ACE-3-PRO 6.1.75, wakelock revert)
 #   3) toolchain cache BASE points at upstream WildKernels release (public assets)
 #   4) internal sub-action refs point at patched workspace copies (not action-source)
 #   5) KSUN/SUSFS pinned to upstream release v2.2.0-r4 combo (last known green)
+#   6) ccache save steps disabled (they fail on fork and poison the job result)
 # Config: WildKernels OP-ACE-3-PRO-6.1.75 (matches currently flashed
 #         AK3_OP-ACE-3-PRO_A15_android14-6.1.75_KSUN_33223_SuSFS_v2.2.0.zip)
 
@@ -87,7 +88,17 @@ jobs:
           n4 = s4.count(old4)
           assert n4 >= 1, 'action-source refs not found'
           open(p4, 'w').write(s4.replace(old4, 'uses: ./.github/actions/'))
-          print('custom injections applied (incl. %d internal action refs)' % n4)
+
+          # 5) disable the ccache save steps: they upload to THIS repo's release
+          #    (ccache-cache bucket) and fail here; the kernel zip is already
+          #    built at that point, so the failure only poisons the job result.
+          p5 = '.github/actions/build-kernel/action.yml'
+          s5 = open(p5).read()
+          old5 = "if: always() && steps.build_kernel_step.conclusion == 'success'"
+          n5 = s5.count(old5)
+          assert n5 >= 1, 'ccache save condition not found'
+          open(p5, 'w').write(s5.replace(old5, 'if: false'))
+          print('custom injections applied (incl. %d action refs, %d ccache ifs)' % (n4, n5))
           PYEOF
           grep -n "__pm_stay_awake" .github/actions/build-kernel/action.yml
           grep -n "WildKernels/OnePlus_KernelSU_SUSFS" .github/actions/kernel-source-sync/action.yml

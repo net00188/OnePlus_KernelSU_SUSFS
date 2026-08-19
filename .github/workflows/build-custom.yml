@@ -7,6 +7,7 @@ name: Custom build (OP-ACE-3-PRO 6.1.75, wakelock revert)
 #      (fixes screen-off loss of kernel-WireGuard + adbd reachability)
 #   2) toolchain cache miss falls back to direct download (fork has no cache release)
 #   3) toolchain cache BASE points at upstream WildKernels release (public assets)
+#   4) internal sub-action refs point at patched workspace copies (not action-source)
 # Config: WildKernels OP-ACE-3-PRO-6.1.75 (matches currently flashed
 #         AK3_OP-ACE-3-PRO_A15_android14-6.1.75_KSUN_33223_SuSFS_v2.2.0.zip)
 # KSUN pinned to the exact commit of the running kernel (v33223).
@@ -76,10 +77,21 @@ jobs:
           newrepo = 'TARGET_REPO = "WildKernels/OnePlus_KernelSU_SUSFS"'
           assert oldrepo in s3, 'TARGET_REPO line not found'
           open(p3, 'w').write(s3.replace(oldrepo, newrepo))
-          print('custom injections applied')
+
+          # 4) the composite re-checks-out PRISTINE upstream into action-source/
+          #    and calls sub-actions from there, bypassing our patches above.
+          #    Point all internal action refs at our patched workspace copies.
+          p4 = '.github/actions/build-kernel/action.yml'
+          s4 = open(p4).read()
+          old4 = 'uses: ./action-source/.github/actions/'
+          n4 = s4.count(old4)
+          assert n4 >= 1, 'action-source refs not found'
+          open(p4, 'w').write(s4.replace(old4, 'uses: ./.github/actions/'))
+          print('custom injections applied (incl. %d internal action refs)' % n4)
           PYEOF
           grep -n "__pm_stay_awake" .github/actions/build-kernel/action.yml
           grep -n "WildKernels/OnePlus_KernelSU_SUSFS" .github/actions/kernel-source-sync/action.yml
+          grep -c "action-source/.github" .github/actions/build-kernel/action.yml || true
 
       - name: Install Minimal Dependencies
         run: |

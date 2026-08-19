@@ -71,7 +71,7 @@ jobs:
           # 3) use UPSTREAM toolchain cache release (fork has none of its own)
           p3 = '.github/actions/kernel-source-sync/action.yml'
           s3 = open(p3).read()
-          oldrepo = 'TARGET_REPO = "${{ github.repository }}"'
+          oldrepo = 'TARGET_REPO = "${' + '{ github.repository }}"'
           newrepo = 'TARGET_REPO = "WildKernels/OnePlus_KernelSU_SUSFS"'
           assert oldrepo in s3, 'TARGET_REPO line not found'
           open(p3, 'w').write(s3.replace(oldrepo, newrepo))

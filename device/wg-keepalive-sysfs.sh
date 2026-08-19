@@ -29,7 +29,7 @@ log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $1" >> "$LOG"; }
 [ -f "$LOG" ] && [ "$(wc -l < "$LOG")" -gt 2000 ] && tail -500 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
 
 mode_now() {
-    if [ -f "$BASE/WL_TEST_MODE" ]; then head -1 "$BASE/WL_TEST_MODE"/dev/null; return; fi
+    if [ -f "$BASE/WL_TEST_MODE" ]; then head -1 "$BASE/WL_TEST_MODE"; return; fi
     h=$(date +%H)
     if [ "$h" -ge $NIGHT_START ] && [ "$h" -lt $NIGHT_END ]; then echo night; else echo day; fi
 }

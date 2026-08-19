@@ -20,6 +20,7 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
   build:
@@ -128,6 +129,11 @@ jobs:
           jq . configs/a15/OP-ACE-3-PRO-6.1.75.json
           echo "config_json=$(jq -c . configs/a15/OP-ACE-3-PRO-6.1.75.json)" >> "$GITHUB_OUTPUT"
 
+      - name: 🩺 Runner diagnostics
+        run: |
+          set -euo pipefail
+          { df -h; echo ---; df -h /dev/shm; echo ---; free -m; echo ---; nproc; echo ---; ulimit -a; } | tee runner_diag.txt
+
       - name: 🔨 Build Kernel
         id: build
         uses: ./.github/actions/build-kernel
@@ -142,6 +148,22 @@ jobs:
           clean: true
           debug: false
           github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🐞 Publish failure diagnostics
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          mkdir -p /tmp/diag
+          cp runner_diag.txt /tmp/diag/ 2>/dev/null || true
+          df -h > /tmp/diag/df_after.txt 2>&1 || true
+          { gh run view "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --log-failed; } > /tmp/diag/failed.log 2>&1 || echo "log-failed unavailable" >> /tmp/diag/failed.log
+          { gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/logs"; } > /tmp/diag/run_logs.zip 2>&1 || echo "logs zip unavailable" >> /tmp/diag/logs_zip_error.txt
+          ls -la /tmp/diag
+          TAG="debug-failure-$(date -u +%Y%m%d-%H%M)"
+          files=(/tmp/diag/*)
+          gh release create "$TAG" "${files[@]}" --title "failure diagnostics run $GITHUB_RUN_ID" --notes "auto-published" || true
 
       - name: 🚀 Create release with flashable zip
         if: success()

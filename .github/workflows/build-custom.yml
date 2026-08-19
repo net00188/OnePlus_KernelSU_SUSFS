@@ -186,18 +186,26 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Collect and publish
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+      - name: Collect
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -uo pipefail
-          mkdir -p /tmp/diag
-          sleep 20
-          { gh run view "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --log-failed; } > /tmp/diag/failed.log 2>&1 || echo "log-failed unavailable" >> /tmp/diag/failed.log
-          { gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/logs" > /tmp/diag/run_logs.zip; } || echo "logs zip unavailable" > /tmp/diag/logs_zip_error.txt
-          ls -la /tmp/diag
-          TAG="debug-failure-$(date -u +%Y%m%d-%H%M%S)"
-          files=(/tmp/diag/*)
-          if [ -s /tmp/diag/failed.log ] || [ -s /tmp/diag/run_logs.zip ]; then
-            gh release create "$TAG" "${files[@]}" --title "failure diagnostics run $GITHUB_RUN_ID" --notes "auto-published" || true
-          fi
+          mkdir -p diag
+          sleep 30
+          gh run view "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --log-failed > "diag/failed_$GITHUB_RUN_ID.log" 2>&1 || echo "log-failed failed rc=$?" >> "diag/failed_$GITHUB_RUN_ID.log"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/logs" > "diag/logs_$GITHUB_RUN_ID.zip" 2>/dev/null || echo "logs zip failed rc=$?" > "diag/logs_error.txt"
+          wc -c diag/* || true
+      - name: Commit logs to repo
+        run: |
+          set -uo pipefail
+          git config user.name "diag-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add diag 2>/dev/null || true
+          git diff --cached --quiet && echo "nothing to commit" && exit 0
+          git commit -m "diag: logs for run $GITHUB_RUN_ID"
+          git push 2>&1 || echo "push failed"

@@ -1,8 +1,12 @@
 #!/system/bin/sh
 # Duty-cycled WG reachability with sleep-phase WeChat/WeCom stop.
+# 07:00-23:00: first 5 minutes of each 30-minute slot are reachable.
+# 08:00-09:00: continuously awake. 23:00-07:00: full deep sleep.
 # Sleep phases set PersistentKeepalive=0, release the sysfs wakelock, enable WiFi PS,
 # and force-stop WeChat/WeCom once on entry. Manually opening either app is allowed
 # until the next sleep transition. Requires the custom kernel and AOD disabled.
+# Test: echo awake|night > /data/adb/wireguard/WL_TEST_MODE
+# Disable: touch /data/adb/wireguard/DISABLE_WAKELOCK && reboot
 
 BASE=/data/adb/wireguard
 LOG=$BASE/wg-remote-keepalive.log
@@ -40,7 +44,8 @@ while :; do
         if [ "$state" != night_sleep ]; then release_night; log "night: keepalive=0, chat apps stopped, deep sleep until 07:00, alarm=$(cat $RTC 2>/dev/null)"; state=night_sleep; fi
     elif in_window; then
         hold
-        if [ "$state" != awake ]; then ping -c1 -W2 "$PING_TARGET" >/dev/null 2>&1 &; log "window+: keepalive=25 reachable 5min slot $(date +%H:%M)"; state=awake; fi
+        if [ "$state" != awake ]; then ping -c1 -W2 "$PING_TARGET" >/dev/null 2>&1 &
+            log "window+: keepalive=25 reachable 5min slot $(date +%H:%M)"; state=awake; fi
     else
         if [ "$state" != day_sleep ]; then release_day; log "window-: keepalive=0 sleep, chat apps stopped, alarm=$(cat $RTC 2>/dev/null)"; state=day_sleep; fi
     fi

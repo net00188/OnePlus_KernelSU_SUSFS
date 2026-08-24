@@ -83,6 +83,10 @@ while :; do
             log "night window: wakelock released, deep sleep allowed, RTC alarm -> $(cat $RTC 2>/dev/null)"
         fi
     else
+        # re-assert every cycle: a wifi reconnect silently resets wlan0 power_save
+        # (observed in the wild) and we want the lock back if anything cleared it
+        echo "$NAME" > /sys/power/wake_lock 2>/dev/null
+        iw dev wlan0 set power_save off 2>/dev/null
         if [ "$cur" != "day" ]; then
             arm_day
             log "day window: wakelock armed (RTC alarm cleared)"
